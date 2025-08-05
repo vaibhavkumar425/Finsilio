@@ -1,0 +1,14 @@
+# Python virtual environment
+.venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets file - DO NOT COMMIT THIS
+.env
+
+# IDE/OS specific files
+.vscode/
+.DS_Store
