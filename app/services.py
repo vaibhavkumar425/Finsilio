@@ -3,7 +3,10 @@ import yfinance as yf
 from telegram import Bot
 from fastapi.concurrency import run_in_threadpool
 import json
-from google import genai
+from groq import AsyncGroq
+
+groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL_NAME = "llama3-70b-8192"
 
 async def send_telegram_message(chat_id: int, message: str):
     """Sends a message to a specific Telegram chat ID."""
@@ -22,18 +25,19 @@ async def send_telegram_message(chat_id: int, message: str):
 async def classify_intent(user_prompt: str) -> str:
     """Uses the LLM to classify the user's intent."""
     print("--- Classifying Intent ---")
-    if not os.getenv("GOOGLE_API_KEY"):
+    if not os.getenv("GROQ_API_KEY"):
         return "ERROR"
     try:
-        client = genai.Client()
         prompt = f"""Is the following user prompt asking for financial analysis or data about a specific company or stock? 
         Answer ONLY with the word 'STOCK' or 'OTHER'.
 
         User Prompt: "{user_prompt}"
         """
-        response = await client.aio.models.generate_content(model='gemini-1.5-flash', contents=prompt)
-        text_response = response.text or ""
-        classification = text_response.strip().upper()
+        chat_completion = await groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=MODEL_NAME,
+        )
+        classification = (chat_completion.choices[0].message.content or "").strip().upper()
         print(f"Intent classified as: {classification}")
         return "STOCK" if "STOCK" in classification else "OTHER"
     except Exception as e:
@@ -43,17 +47,19 @@ async def classify_intent(user_prompt: str) -> str:
 async def extract_entity(user_prompt: str) -> str | None:
     """Uses the LLM to extract a single company name or stock ticker from a prompt."""
     print("--- Extracting Entity ---")
-    if not os.getenv("GOOGLE_API_KEY"):
+    if not os.getenv("GROQ_API_KEY"):
         return None
     try:
-        client = genai.Client()
         prompt = f"""From the following user prompt, extract the single most likely company name or stock ticker.
         Return ONLY the company name or stock ticker. If no specific company or ticker is mentioned, return 'NONE'.
 
         User Prompt: "{user_prompt}"
         """
-        response = await client.aio.models.generate_content(model='gemini-1.5-flash', contents=prompt)
-        entity = (response.text or "").strip()
+        chat_completion = await groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=MODEL_NAME,
+        )
+        entity = (chat_completion.choices[0].message.content or "").strip()
         print(f"Extracted entity: {entity}")
         return None if "NONE" in entity.upper() else entity
     except Exception as e:
@@ -64,16 +70,18 @@ async def extract_entity(user_prompt: str) -> str | None:
 async def get_ticker_from_entity(entity: str) -> str | None:
     """Uses the LLM to find the official stock ticker for a given company entity."""
     print(f"--- Mapping Entity '{entity}' to Ticker ---")
-    if not os.getenv("GOOGLE_API_KEY"):
+    if not os.getenv("GROQ_API_KEY"):
         return None
     try:
-        client = genai.Client()
         prompt = f"""What is the official stock ticker for the company '{entity}'? 
         Return ONLY the ticker symbol (e.g., GOOGL, AAPL). 
         If you cannot find a ticker, return 'NONE'.
         """
-        response = await client.aio.models.generate_content(model='gemini-1.5-flash', contents=prompt)
-        ticker = (response.text or "").strip().upper()
+        chat_completion = await groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=MODEL_NAME,
+        )
+        ticker = (chat_completion.choices[0].message.content or "").strip().upper()
         print(f"Mapped to ticker: {ticker}")
         return None if "NONE" in ticker else ticker
     except Exception as e:
@@ -89,9 +97,11 @@ def _fetch_yf_data_interactive(ticker: str) -> dict:
     except Exception as e:
         print(f"Could not fetch price data for {ticker}: {e}")
         return {}
+    
 async def get_stock_data_interactive(ticker: str) -> dict:
     print(f"--- Fetching Price Data for {ticker} ---")
     return await run_in_threadpool(_fetch_yf_data_interactive, ticker)
+
 async def fetch_stock_news_interactive(ticker: str) -> list[str]:
     print(f"--- Fetching News for {ticker} ---")
     try:
@@ -113,7 +123,7 @@ async def generate_single_stock_analysis(ticker: str, price_data: dict, news_dat
     print("-------------------------------------------")
     # ------------------------------------
 
-    if not os.getenv("GOOGLE_API_KEY"):
+    if not os.getenv("GROQ_API_KEY"):
         return "Error: Google API Key not configured."
     
     relevant_price_data = {
@@ -127,7 +137,6 @@ async def generate_single_stock_analysis(ticker: str, price_data: dict, news_dat
     }
 
     try:
-        client = genai.Client()
         prompt = f"""
         You are a financial analyst for 'Finsilio'. Provide a concise, professional analysis for the stock: {ticker}.
 
@@ -140,11 +149,11 @@ async def generate_single_stock_analysis(ticker: str, price_data: dict, news_dat
         - Key **Data Points** in a bulleted list.
         - A short **News Sentiment** section (Positive, Negative, or Neutral) based on the headlines.
         """
-        response = await client.aio.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=prompt
+        chat_completion = await groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=MODEL_NAME,
         )
-        return response.text or "Error: The AI model returned no content."
+        return chat_completion.choices[0].message.content or "Error: The AI model returned no content."
     except Exception as e:
         print(f"Error generating content with Gemini: {e}")
         return "Error: Failed to generate AI analysis."

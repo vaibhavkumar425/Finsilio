@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
 
+load_dotenv()
+
 from app.graph import interactive_graph_agent
 
 # Defines the structure of the incoming data from Telegram
@@ -26,8 +28,6 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Load environment variables from .env file
-load_dotenv()
 
 # --- API Endpoints ---
 @app.get("/", tags=["General"])
